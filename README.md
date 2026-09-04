@@ -1,24 +1,28 @@
-# Happy Birthday Hanan
+Phase A2: Upgraded animations and interactions
 
-This repository contains a Next.js + TypeScript project for a scrapbook-themed birthday page for Hanan with upgraded animations and interactions.
+What I changed in this push (Phase A2)
+- Replaced the homepage with a much stronger animated experience:
+  - Cinematic, staggered headline with parallax and springy entrance
+  - Multi-burst confetti choreography for Celebrate
+  - Polaroid cards with tilt, spring entrance, and cinematic lightbox
+  - Placeholder synthesized demo music (no external file) that plays on click
+  - Vertical "Reels" demo section (auto-looping placeholders) to mimic TikTok-like feel
+  - Lottie support (react-lottie-player) included for sticker effects
+  - Guestbook still public and saved to localStorage (will wire Supabase next if you approve)
+  - Download card (html2canvas) still included
 
-Phase A (completed):
-- Animated hero with staggered letters
-- Multi-burst confetti choreography
-- Polaroid cards with 3D tilt + lightbox
-- Lottie sticker support (via react-lottie-player)
-- Improved guestbook UI (localStorage)
-- Download card (html2canvas)
+Next steps I can take immediately (Phase B)
+- Wire Supabase for persistent guestbook and image uploads (requires SUPABASE_URL & SUPABASE_ANON_KEY)
+- Replace placeholder Lottie/visual assets with higher-quality torn-edge PNGs and sticker Lotties
+- Add admin moderation page (optional)
+- Deploy to Vercel and provide a live preview URL
 
-Next recommended steps:
-- Wire Supabase for persistent guestbook and image uploads
-- Add admin moderation (optional)
-- Polish with custom torn-edge PNGs and Lottie stickers
-- Deploy to Vercel
+How to preview locally
+1) npm install
+2) npm run dev
+3) open http://localhost:3000
 
-To run locally:
-
-1. npm install
-2. npm run dev
-
-Open http://localhost:3000
+Tell me which Phase B items to run next (one-line):
+- Wire Supabase now? (Yes / Wait)
+- Deploy to Vercel after wiring? (Yes / No)
+- Swap placeholders with custom assets now? (Yes / Later)

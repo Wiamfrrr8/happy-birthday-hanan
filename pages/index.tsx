@@ -6,36 +6,38 @@ import { motion, AnimatePresence } from 'framer-motion'
 
 const Lottie = dynamic(() => import('react-lottie-player'), { ssr: false })
 
-const stickerUrl = 'https://assets7.lottiefiles.com/packages/lf20_jmgekfqg.json' // small heart sparkle
-const sticker2 = 'https://assets6.lottiefiles.com/packages/lf20_tfb3estd.json' // confetti burst Lottie
+// Phase A2: upgraded animations, placeholder synthesized music, vertical reels
 
-export default function Home() {
+export default function Home(){
   const [countdown, setCountdown] = useState('-- days --:--:--')
   const [messages, setMessages] = useState<any[]>([])
   const confettiRef = useRef<HTMLCanvasElement | null>(null)
   const [lightbox, setLightbox] = useState<{src:string, caption?:string}|null>(null)
+  const audioState = useRef<{ctx?:AudioContext, osc?:OscillatorNode, playing:boolean}>({playing:false})
+  const [isPlaying, setIsPlaying] = useState(false)
 
   useEffect(()=>{
     const target = nextBirthdayDate(9,9)
     const id = setInterval(()=> setCountdown(calcCountdown(target)), 1000)
     setMessages(JSON.parse(localStorage.getItem('hb_guestbook_v1')||'[]'))
-    // ensure canvas matches
     resizeCanvas()
     window.addEventListener('resize', resizeCanvas)
     return ()=>{ clearInterval(id); window.removeEventListener('resize', resizeCanvas) }
   },[])
 
   function resizeCanvas(){ const c = confettiRef.current; if(c){ c.width = window.innerWidth; c.height = window.innerHeight } }
-
   function nextBirthdayDate(month=9, day=9){ const now = new Date(); let year = now.getFullYear(); const t = new Date(year, month-1, day, 0,0,0); if(t<=now) t.setFullYear(year+1); return t }
   function calcCountdown(target:Date){ const now=new Date(); const diff=target.getTime()-now.getTime(); if(diff<=0) return "Happy Birthday Hanan! 🎉"; const days=Math.floor(diff/(1000*60*60*24)); const hrs=Math.floor((diff/(1000*60*60))%24); const mins=Math.floor((diff/(1000*60))%60); const secs=Math.floor((diff/1000)%60); return `${days} days ${String(hrs).padStart(2,'0')}:${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}` }
 
-  // multi-burst confetti choreography
-  function multiBurst(){
+  // stronger choreography
+  function celebrate(){
     const myConfetti = confetti.create(confettiRef.current as any, { resize:true, useWorker:true })
-    myConfetti({ particleCount: 120, spread:160, origin:{ y:0.35 }, colors: ['#C86B75','#E9A7A8','#7A2034','#B94A56'] })
-    setTimeout(()=> myConfetti({ particleCount: 80, spread:120, origin:{ x:0.2, y:0.5 }, colors: ['#C86B75','#7A2034'] }), 250)
-    setTimeout(()=> myConfetti({ particleCount: 80, spread:120, origin:{ x:0.8, y:0.5 }, colors: ['#E9A7A8','#B94A56'] }), 350)
+    myConfetti({ particleCount: 180, spread: 160, origin:{ y:0.35 }, colors: ['#C86B75','#E9A7A8','#7A2034','#B94A56'] })
+    setTimeout(()=> myConfetti({ particleCount: 90, spread: 120, origin:{ x:0.2, y:0.55 }, colors: ['#C86B75','#7A2034'] }), 200)
+    setTimeout(()=> myConfetti({ particleCount: 90, spread: 120, origin:{ x:0.8, y:0.55 }, colors: ['#E9A7A8','#B94A56'] }), 350)
+    // small lottie burst can be triggered via state if needed
+    // short celebratory beep
+    try{ const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); const o = ctx.createOscillator(); const g = ctx.createGain(); o.type='sine'; o.frequency.value=880; g.gain.value=0.02; o.connect(g); g.connect(ctx.destination); o.start(); setTimeout(()=>{ o.stop(); ctx.close(); }, 160); }catch(e){}
   }
 
   function postMessage(name:string, text:string){
@@ -43,13 +45,48 @@ export default function Home() {
     msgs.push({ name, text, t: Date.now() })
     localStorage.setItem('hb_guestbook_v1', JSON.stringify(msgs))
     setMessages(msgs.slice())
-    // small confetti for celebration
     const myConfetti = confetti.create(confettiRef.current as any, { resize:true })
     myConfetti({ particleCount:30, spread:80, origin:{ y:0.6 } })
   }
 
-  // photo upload preview
-  function handlePhotoPick(e:any, slot:number){ const f = e.target.files?.[0]; if(!f) return; const reader = new FileReader(); reader.onload = (ev)=>{ const data = ev.target?.result as string; const el = document.querySelector(`[data-slot=\"${slot}\"] img`) as HTMLImageElement; const ph = document.querySelector(`[data-slot=\"${slot}\"] .placeholder`) as HTMLElement; if(el){ el.src = data; el.style.display='block'; ph && (ph.style.display='none') } }; reader.readAsDataURL(f) }
+  // synth placeholder music: a soft arpeggio loop (no external file)
+  function togglePlaceholderMusic(){
+    if(audioState.current.playing){
+      try{ audioState.current.osc?.stop(); audioState.current.ctx?.close(); }catch(e){}
+      audioState.current = {playing:false}
+      setIsPlaying(false)
+      return
+    }
+    // create a layered synth-ish pattern
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
+    audioState.current.ctx = ctx
+    const master = ctx.createGain(); master.gain.value = 0.04; master.connect(ctx.destination)
+
+    // simple arpeggio using oscillators sequenced with setInterval
+    const freqs = [440, 550, 660, 880]
+    let i=0
+    const osc = ctx.createOscillator(); // single oscillator; we will create small envelope per note using gain nodes
+    // Instead create scheduled notes using small Gain nodes
+    const interval = setInterval(()=>{
+      const note = ctx.createOscillator()
+      const g = ctx.createGain()
+      note.type = 'sine'
+      note.frequency.value = freqs[i%freqs.length]
+      g.gain.value = 0.0001
+      note.connect(g); g.connect(master)
+      const now = ctx.currentTime
+      g.gain.linearRampToValueAtTime(0.04, now + 0.01)
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.5)
+      note.start(now)
+      note.stop(now + 0.6)
+      i++
+    }, 300)
+
+    audioState.current.osc = { } as any
+    (audioState.current as any).stopInterval = ()=> clearInterval(interval)
+    audioState.current.playing = true
+    setIsPlaying(true)
+  }
 
   return (
     <>
@@ -63,47 +100,35 @@ export default function Home() {
       <main className="min-h-screen flex items-start justify-center p-6">
         <div className="card relative w-full max-w-5xl rounded-lg p-6 shadow-2xl paper-texture">
 
-          {/* HERO */}
           <section className="flex items-start gap-6">
             <div className="flex-1">
-              <AnimatedHeadline onCelebrate={multiBurst} />
+              <AnimatedHeadline onCelebrate={celebrate} />
               <div className="mt-3 text-sm text-maroon/80">Countdown to Hanan's birthday</div>
               <div className="text-2xl font-bold text-maroon mt-1">{countdown}</div>
             </div>
 
-            <div className="w-36 flex flex-col gap-2 items-end">
+            <div className="w-40 flex flex-col gap-2 items-end">
               <div className="lottie-wrap">
-                <Lottie loop animationData={null} play style={{width:64,height:64}}>
-                  <div style={{width:64,height:64}}>
-                    {/* fallback static emoji while dynamic lottie loads */}
-                    <div style={{fontSize:36}}>💖</div>
-                  </div>
-                </Lottie>
+                <Lottie loop play animationData={null} style={{width:64,height:64}} />
               </div>
 
               <div className="flex flex-col gap-2">
-                <button className="px-3 py-2 bg-maroon text-white rounded" onClick={multiBurst}>Celebrate</button>
-                <DownloadBtn/>
+                <button className="px-3 py-2 bg-maroon text-white rounded" onClick={celebrate}>Celebrate</button>
+                <button className="px-3 py-2 border rounded" onClick={togglePlaceholderMusic}>{isPlaying? 'Stop Music' : 'Play Demo Music'}</button>
               </div>
             </div>
           </section>
 
-          {/* MAIN LAYOUT */}
           <section className="mt-6 grid md:grid-cols-[1fr_360px] gap-4">
             <div className="space-y-4">
-              <div className="flex flex-wrap gap-4">
-                <Polaroid slot={1} title="Best memories" onOpen={(src,caption)=>setLightbox({src,caption})} onPick={(e)=>handlePhotoPick(e,1)} />
-                <Polaroid slot={2} title="Love you always" className="ml-4" onOpen={(src,caption)=>setLightbox({src,caption})} onPick={(e)=>handlePhotoPick(e,2)} />
-              </div>
-
-              <div className="sticker bg-white/90 p-4 rounded flex items-center justify-between shadow">
-                <div>
-                  <div className="text-maroon font-bold">A little reminder</div>
-                  <div className="text-sm text-maroon/90">The world is brighter because you're in it — keep shining always!</div>
+              <div className="flex flex-wrap gap-6">
+                <Polaroid slot={1} title="Best memories" onOpen={(s,c)=>setLightbox({src:s, caption:c})} onPick={(e)=>handlePhotoPick(e,1)} />
+                <Polaroid slot={2} title="Love you always" onOpen={(s,c)=>setLightbox({src:s, caption:c})} onPick={(e)=>handlePhotoPick(e,2)} />
+                <div className="w-full">
+                  <h3 className="text-maroon font-semibold mb-2">Reels — short clips & memories</h3>
+                  <Reels/>
                 </div>
-                <div style={{fontSize:34}}>💖</div>
               </div>
-
             </div>
 
             <aside className="space-y-3">
@@ -119,7 +144,12 @@ export default function Home() {
           <footer className="mt-4 flex justify-between items-center text-sm text-maroon/90">
             <div>Made with ❤️ for Hanan — 9/9</div>
             <div className="flex items-center gap-2">
-              <label className="px-3 py-1 border rounded cursor-pointer">Upload Music<input type="file" accept="audio/*" className="hidden" onChange={(e)=>{ const f=e.target.files?.[0]; if(!f) return; const url = URL.createObjectURL(f); const a = document.getElementById('bg-audio') as HTMLAudioElement; a.src = url; a.play() }} /></label>
+              <button className="px-3 py-1 border rounded" onClick={async ()=>{
+                const { default: html2canvas } = await import('html2canvas')
+                const el = document.querySelector('.card') as HTMLElement
+                const canvas = await html2canvas(el, { backgroundColor: null, scale:2 })
+                const link = document.createElement('a'); link.href = canvas.toDataURL(); link.download = 'happy-birthday-hanan.png'; link.click()
+              }}>Download Card</button>
             </div>
           </footer>
 
@@ -151,34 +181,40 @@ export default function Home() {
 function AnimatedHeadline({ onCelebrate }: any){
   const text = 'Happy Birthday, Hanan!'
   const parts = text.split('')
-  const [play, setPlay] = useState(true)
+  const containerRef = useRef<HTMLDivElement|null>(null)
+
+  // small parallax on mouse
+  useEffect(()=>{
+    const el = containerRef.current
+    if(!el) return
+    function onMove(e:MouseEvent){ const x = (e.clientX / window.innerWidth - 0.5)*8; const y = (e.clientY / window.innerHeight - 0.5)*6; el.style.transform = `translate3d(${x}px, ${y}px, 0)` }
+    window.addEventListener('mousemove', onMove)
+    return ()=> window.removeEventListener('mousemove', onMove)
+  },[])
 
   return (
-    <div>
-      <div className="flex items-center gap-3">
-        <motion.h1 initial={{opacity:0}} animate={{opacity:1}} transition={{delay:0.1}} className="text-5xl font-bold text-maroon tracking-wide">
+    <div ref={containerRef}>
+      <div className="flex items-center gap-4">
+        <motion.h1 initial={{opacity:0}} animate={{opacity:1}} transition={{delay:0.05}} className="text-6xl font-extrabold leading-tight text-maroon tracking-tighter">
           {parts.map((c,i)=> (
-            <motion.span key={i} initial={{y:40,opacity:0,rotate:-8}} animate={{y:0,opacity:1,rotate:0}} transition={{delay: i*0.03, type:'spring', stiffness:120}} style={{display:'inline-block'}}>{c}</motion.span>
+            <motion.span key={i} initial={{y:60, rotate:-12, opacity:0}} animate={{y:0, rotate:0, opacity:1}} transition={{delay: i*0.04, type:'spring', stiffness:140}} style={{display:'inline-block'}}>{c}</motion.span>
           ))}
         </motion.h1>
 
-        <motion.div initial={{scale:0}} animate={{scale:1}} transition={{delay:0.8}}>
-          <button className="px-3 py-2 bg-rose text-white rounded" onClick={onCelebrate}>Celebrate 🎉</button>
-        </motion.div>
+        <motion.button initial={{scale:0}} animate={{scale:1}} transition={{delay:0.9}} className="px-3 py-2 bg-rose text-white rounded" onClick={onCelebrate}>Celebrate</motion.button>
       </div>
 
-      <div className="mt-2 text-sm text-maroon/70">A special page for Hanan — September 9</div>
+      <motion.div initial={{opacity:0}} animate={{opacity:1}} transition={{delay:1.2}} className="mt-2 text-sm text-maroon/70">A special page for Hanan — September 9</motion.div>
     </div>
   )
 }
 
 function Polaroid({ slot, title, className='', onOpen, onPick }: any){
-  // simple 3D tilt on mouse move
-  function onMove(e:any){ const el = e.currentTarget; const rect = el.getBoundingClientRect(); const x = (e.clientX - rect.left) / rect.width; const y = (e.clientY - rect.top) / rect.height; const rx = (y - 0.5) * -10; const ry = (x - 0.5) * 10; el.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg) translateZ(0)` }
+  function onMove(e:any){ const el = e.currentTarget; const rect = el.getBoundingClientRect(); const x = (e.clientX - rect.left) / rect.width; const y = (e.clientY - rect.top) / rect.height; const rx = (y - 0.5) * -10; const ry = (x - 0.5) * 10; el.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg) translateZ(0) scale(1.02)` }
   function onLeave(e:any){ e.currentTarget.style.transform = '' }
 
   return (
-    <div className={`polaroid tilt p-2 ${className}`} style={{width:320}} onMouseMove={onMove} onMouseLeave={onLeave}>
+    <motion.div initial={{opacity:0, y:30, rotate: -6}} animate={{opacity:1, y:0, rotate:0}} transition={{type:'spring', stiffness:120}} className={`polaroid tilt p-2 ${className}`} style={{width:320}} onMouseMove={onMove} onMouseLeave={onLeave}>
       <div className="tape w-16 h-5 bg-pink -translate-y-2 rotate-12" />
       <div className="photo relative bg-gradient-to-br from-rose to-maroon rounded cursor-pointer flex items-center justify-center" data-slot={slot} onClick={()=>{
         const img = (document.querySelector(`[data-slot=\"${slot}\"] img`) as HTMLImageElement)
@@ -190,9 +226,34 @@ function Polaroid({ slot, title, className='', onOpen, onPick }: any){
       </div>
       <div className="text-center text-sm mt-2 text-maroon/90">{title}</div>
       <input id={`photo${slot}`} type="file" accept="image/*" className="hidden" onChange={onPick} />
+    </motion.div>
+  )
+}
+
+function Reels(){
+  // small vertical reels demo — uses placeholder gradient cards that auto-loop
+  const items = new Array(5).fill(0).map((_,i)=>({ id:i, title:`Memory ${i+1}` }))
+  const [index, setIndex] = useState(0)
+  useEffect(()=>{
+    const t = setInterval(()=> setIndex(i=> (i+1)%items.length), 2800)
+    return ()=> clearInterval(t)
+  },[])
+
+  return (
+    <div className="relative overflow-hidden rounded" style={{height:220}}>
+      {items.map((it, i)=> (
+        <motion.div key={it.id} initial={{opacity:0, y:20}} animate={{opacity: i===index?1:0, y: i===index?0:20}} transition={{duration:0.6}} className="absolute inset-0 flex items-center justify-center" style={{background: `linear-gradient(135deg, rgba(200,107,117,0.1), rgba(122,32,52,0.1))`, borderRadius:8}}>
+          <div className="text-center p-6">
+            <div className="text-xl font-semibold text-maroon">{it.title}</div>
+            <div className="mt-2 text-sm text-maroon/80">Swipe on mobile — or watch the loop</div>
+          </div>
+        </motion.div>
+      ))}
     </div>
   )
 }
+
+function handlePhotoPick(e:any, slot:number){ const f = e.target.files?.[0]; if(!f) return; const reader = new FileReader(); reader.onload = (ev)=>{ const data = ev.target?.result as string; const el = document.querySelector(`[data-slot=\"${slot}\"] img`) as HTMLImageElement; const ph = document.querySelector(`[data-slot=\"${slot}\"] .placeholder`) as HTMLElement; if(el){ el.src = data; el.style.display='block'; ph && (ph.style.display='none') } }; reader.readAsDataURL(f) }
 
 function Guestbook({ onPost, messages }: any){
   const [name, setName] = useState('')
@@ -218,15 +279,6 @@ function Guestbook({ onPost, messages }: any){
       </div>
     </div>
   )
-}
-
-function DownloadBtn(){
-  return <button className="px-3 py-2 border rounded" onClick={async ()=>{
-    const { default: html2canvas } = await import('html2canvas')
-    const el = document.querySelector('.card') as HTMLElement
-    const canvas = await html2canvas(el, { backgroundColor: null, scale:2 })
-    const link = document.createElement('a'); link.href = canvas.toDataURL(); link.download = 'happy-birthday-hanan.png'; link.click()
-  }}>Download Card</button>
 }
 
 function escapeHtml(s:any){ return String(s).replace(/[&<>"]/g, (c)=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]||c)) }
